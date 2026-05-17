@@ -1,12 +1,12 @@
-import os
 import numpy as np
 
 from gymnasium import spaces
+from PIL import Image, ImageDraw
 from dyn_rl_benchmarks.envs.goal_env import GoalEnv
 
 
 class DrawbridgeEnv(GoalEnv):
-    metadata = {"render.modes": ["human"]}
+    metadata = {"render_modes": ["rgb_array", "human"]}
 
     _max_vel = 0.1
     max_episode_length = 1000
@@ -124,150 +124,75 @@ class DrawbridgeEnv(GoalEnv):
         self._timed_subgoals = timed_subgoals
         self._tolerances = tolerances
 
-    def render(self, mode="human", close=False):
-        from ..utils.graphics_utils import get_default_subgoal_colors
-        import pyglet
-        import pyglet.gl as gl
-        from wavefront_reader import read_wavefront
+    def render(self):
 
-        from ..utils.pyglet_utils import render_wavefront_geom, draw_circle_sector3d
+        W, H = 1200, 400
+        img = Image.new("RGB", (W, H), color=(168, 216, 234))
+        draw = ImageDraw.Draw(img)
 
-        if self.window is None:
-            self._subgoal_colors = get_default_subgoal_colors()
-            self.window = pyglet.window.Window(
-                width=self.window_width,
-                height=self.window_height,
-                vsync=True,
-                resizable=True,
-            )
-            gl.glClearColor(*self.background_color)
+        def to_px(x, y):
+            """Převod souřadnic prostředí na pixely."""
+            px = int((x + 0.5) / (self._river_length + 1.0) * W)
+            py = int((1.0 - (y + 1.5) / 4.5) * H)
+            return px, py
 
-            # load meshes
-            self.geoms = read_wavefront(
-                os.path.join(os.path.dirname(__file__), "assets", "drawbridge.obj")
-            )
-
-            # position of sails
-            self._sails_y = [
-                np.max(self.geoms[f"sail{i}"]["v"][:, 1])
-                for i in range(1, self._n_sails + 1)
-            ]
-
-            # y position of subgoal
-            self._subgoal_y = np.min(self.geoms["subgoal"]["v"][:, 1])
-
-            # lighting
-            gl.glEnable(gl.GL_LIGHTING)
-            gl.glLightfv(
-                gl.GL_LIGHT0, gl.GL_AMBIENT, (gl.GLfloat * 4)(0.1, 0.1, 0.1, 1)
-            )
-            gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, (gl.GLfloat * 4)(1, 1, 1, 1))
-            gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, (gl.GLfloat * 4)(0, 0, 0, 1))
-            gl.glEnable(gl.GL_LIGHT0)
-            gl.glLightModeli(gl.GL_LIGHT_MODEL_TWO_SIDE, gl.GL_TRUE)
-
-            # recalculate normals (needed due to scaling of subgoals and sails)
-            gl.glEnable(gl.GL_NORMALIZE)
-
-            # depth test
-            gl.glEnable(gl.GL_DEPTH_TEST)
-
-            # semi-transparent objects
-            gl.glEnable(gl.GL_BLEND)
-            gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-
-        @self.window.event
-        def on_resize(width, height):
-            gl.glViewport(0, 0, width, height)
-            gl.glMatrixMode(gl.GL_PROJECTION)
-            gl.glLoadIdentity()
-            gl.gluPerspective(40, width / float(height), 0.1, 1000)
-            gl.glMatrixMode(gl.GL_MODELVIEW)
-            return pyglet.event.EVENT_HANDLED
-
-        self.window.clear()
-        self.window.dispatch_events()
-
-        gl.glLoadIdentity()
-
-        # camera transformation
-        gl.gluLookAt(*self._position, *self._lookat, 1.0, 0.0)
-
-        # environment
-        for geom_name in self._env_geoms:
-            render_wavefront_geom(self.geoms[geom_name])
-
-        def draw_ship(pos, sails_unfurled, color=None, alpha=1.0):
-            gl.glPushMatrix()
-            gl.glTranslatef(0.0, 0.0, pos)
-            render_wavefront_geom(self.geoms["ship"], color=color, alpha=alpha)
-            for i in range(self._n_sails):
-                # sails
-                gl.glPushMatrix()
-                gl.glTranslatef(0.0, self._sails_y[i], 0.0)
-                gl.glScalef(1.0, sails_unfurled, 1.0)
-                gl.glTranslatef(0.0, -self._sails_y[i], 0.0)
-                render_wavefront_geom(
-                    self.geoms[f"sail{i + 1}"], color=color, alpha=alpha
-                )
-                gl.glPopMatrix()
-            gl.glPopMatrix()
-
-        # ship
-        draw_ship(self.ship_pos, self.sails_unfurled)
+        x0, y0 = to_px(-0.5, -0.5)
+        x1, y1 = to_px(self._river_length + 0.5, -1.5)
+        draw.rectangle([x0, y0, x1, y1], fill=(139, 105, 20))
 
         angle = self._get_drawbridge_angle()
-        center_of_rot = (0.6, 0.275, 0.0)
+        bridge_x = self._river_length / 2.0
+        if angle > -90.0:
+            draw.line(
+                [to_px(bridge_x - 0.6, 0.0), to_px(bridge_x, 0.0)],
+                fill=(92, 64, 51),
+                width=6,
+            )
+            draw.line(
+                [to_px(bridge_x, 0.0), to_px(bridge_x + 0.6, 0.0)],
+                fill=(92, 64, 51),
+                width=6,
+            )
+        else:
+            draw.line(
+                [to_px(bridge_x - 0.6, 0.0), to_px(bridge_x, 0.6)],
+                fill=(92, 64, 51),
+                width=6,
+            )
+            draw.line(
+                [to_px(bridge_x, 0.6), to_px(bridge_x + 0.6, 0.0)],
+                fill=(92, 64, 51),
+                width=6,
+            )
 
-        # drawbridge left
-        gl.glPushMatrix()
-        gl.glTranslatef(center_of_rot[0], center_of_rot[1], center_of_rot[2])
-        gl.glRotatef(angle, 0.0, 0.0, 1.0)
-        gl.glTranslatef(-center_of_rot[0], -center_of_rot[1], -center_of_rot[2])
-        render_wavefront_geom(self.geoms["bridge_left"])
-        gl.glPopMatrix()
+        sx0, sy0 = to_px(self.ship_pos - 0.3, 0.0)
+        sx1, sy1 = to_px(self.ship_pos + 0.3, -0.5)
+        draw.rectangle([sx0, sy0, sx1, sy1], fill=(128, 128, 128))
 
-        # drawbridge right
-        gl.glPushMatrix()
-        gl.glTranslatef(-center_of_rot[0], center_of_rot[1], center_of_rot[2])
-        gl.glRotatef(-angle, 0.0, 0.0, 1.0)
-        gl.glTranslatef(center_of_rot[0], -center_of_rot[1], -center_of_rot[2])
-        render_wavefront_geom(self.geoms["bridge_right"])
-        gl.glPopMatrix()
+        sail_height = self.sails_unfurled * 1.5
+        if sail_height > 0.01:
+            px0, py0 = to_px(self.ship_pos - 0.05, sail_height)
+            px1, py1 = to_px(self.ship_pos + 0.05, 0.0)
+            draw.rectangle([px0, py0, px1, py1], fill=(221, 221, 221))
 
-        def render_subgoal(sg, tol, color):
-            # cull polygons facing away from camera
-            gl.glEnable(gl.GL_CULL_FACE)
-            pos = (sg["ship_pos"] + 1.0) * 0.5 * self._river_length
-            sails_unfurled = (sg["sails_unfurled"] + 1.0) * 0.5
-            draw_ship(pos, sails_unfurled, color=color, alpha=0.4)
-            gl.glDisable(gl.GL_CULL_FACE)
+        gx0, gy0 = to_px(self._goal - self._goal_radius, 0.0)
+        gx1, gy1 = to_px(self._goal + self._goal_radius, -0.5)
+        draw.rectangle([gx0, gy0, gx1, gy1], fill=(0, 200, 0, 80))
+        gx = to_px(self._goal, 0.0)[0]
+        draw.line([(gx, 0), (gx, H)], fill=(0, 180, 0), width=3)
 
-        # timed subgoals
-        for ts, color, tol in zip(
-            self._timed_subgoals, self._subgoal_colors, self._tolerances
-        ):
-            if ts is not None:
-                # translucent ship in goal state
-                pos_tol = tol["ship_pos"] if tol is not None else self.subgoal_radius
-                render_subgoal(ts.goal, pos_tol, color)
-                # circle sector indicating desired time until achievement
-                draw_circle_sector3d(
-                    center=(
-                        0.0,
-                        1.5,
-                        (ts.goal["ship_pos"] + 1.0) * 0.5 * self._river_length - 9.0,
-                    ),
-                    rotation=(90.0, 0.0, 0.0),
-                    angle=ts.delta_t_ach * 0.02,
-                    radius=0.3,
-                    n=64,
-                    color=color,
-                )
-
-        # subgoals
-        for sg, color in zip(self._subgoals, self._subgoal_colors):
+        colors_rgb = [(255, 100, 0), (0, 100, 255), (200, 0, 200)]
+        for i, sg in enumerate(self._subgoals):
             if sg is not None:
-                render_subgoal(sg, self.subgoal_radius, color)
+                pos = (sg["ship_pos"] + 1.0) * 0.5 * self._river_length
+                px = to_px(pos, 0.0)[0]
+                color = colors_rgb[i % len(colors_rgb)]
+                draw.line([(px, 0), (px, H)], fill=color, width=2)
 
-        self.window.flip()
+        draw.text(
+            (10, 10),
+            f"step={self.current_step} | ship_pos={self.ship_pos:.2f} | bridge={angle:.1f}°",
+            fill=(0, 0, 0),
+        )
+
+        return np.array(img)

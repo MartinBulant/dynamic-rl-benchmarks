@@ -12,7 +12,7 @@ from dyn_rl_benchmarks.envs.goal_env import GoalEnv
 
 
 class PlatformsEnv(GoalEnv):
-    metadata = {"render.modes": ["human"]}
+    metadata = {"render_modes": ["human", "rgb_array"]}
 
     class _Trigger:
         def __init__(self, position, width, height, max_act_time):
@@ -293,7 +293,9 @@ class PlatformsEnv(GoalEnv):
 
     def step(self, action):
         self.ball.ApplyForce(
-            (action[0] * self.max_force, 0.0), point=self.ball.position, wake=True
+            (float(action[0]) * self.max_force, 0.0),
+            point=self.ball.position,
+            wake=True,
         )
 
         t = self.current_step * self.time_step
