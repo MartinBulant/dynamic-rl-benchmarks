@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dyn_rl_benchmarks"
+version = "1.0.0"
+description = "Reinforcement learning benchmark problems set in dynamic environments."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Nico Gürtler", email = "nico.guertler@tuebingen.mpg.de" },
+    { name = "Martin Bulant", email = "Martin.Bulant@seznam.cz" },
+    ]
+keywords = ["reinforcement learning", "reinforcement learning environments"]
+requires-python = ">=3.12"
+dependencies = ["numpy", "gymnasium", "roboball2d", "wavefront_reader"]
+
+[project.urls]
+Homepage = "https://github.com/martius-lab/dynamic-rl-benchmarks"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+"dyn_rl_benchmarks.envs.assets" = ["drawbridge.obj", "drawbridge.mtl"]
